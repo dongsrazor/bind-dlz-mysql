@@ -4,10 +4,11 @@ package dlzmysql
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strconv"
-	"fmt"
-	
+
+	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/request"
 
 	"github.com/miekg/dns"
@@ -15,7 +16,10 @@ import (
 
 // Dlzmysql is a plugin that returns your IP address, port and the protocol used for connecting
 // to CoreDNS.
-type Dlzmysql struct{}
+type Dlzmysql struct {
+	Next    plugin.Handler
+	IPtable []IPrange
+}
 
 // ServeDNS implements the plugin.Handler interface.
 func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
@@ -26,8 +30,8 @@ func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 	a.Authoritative = true
 
 	ip := state.IP()
-	iptable := loadIPtable()
-	result := queryIP(iptable, ip)
+
+	result := queryIP(wh.IPtable, ip)
 	fmt.Println(result)
 	var rr dns.RR
 

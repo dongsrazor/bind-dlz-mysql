@@ -19,9 +19,9 @@ func setup(c *caddy.Controller) error {
 	if c.NextArg() {
 		return plugin.Error("dlzmysql", c.ArgErr())
 	}
-
+	iptable := loadIPtable()
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
-		return Dlzmysql{}
+		return Dlzmysql{Next: next, IPtable: iptable}
 	})
 
 	return nil
