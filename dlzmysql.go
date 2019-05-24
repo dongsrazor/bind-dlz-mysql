@@ -6,7 +6,8 @@ import (
 	"context"
 	"net"
 	"strconv"
-
+	"fmt"
+	
 	"github.com/coredns/coredns/request"
 
 	"github.com/miekg/dns"
@@ -25,6 +26,9 @@ func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 	a.Authoritative = true
 
 	ip := state.IP()
+	iptable := loadIPtable()
+	result := queryIP(iptable, ip)
+	fmt.Println(result)
 	var rr dns.RR
 
 	switch state.Family() {
