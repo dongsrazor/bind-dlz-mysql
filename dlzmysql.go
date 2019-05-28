@@ -40,6 +40,7 @@ func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 		rr = new(dns.A)
 		rr.(*dns.A).Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: state.QClass()}
 		rr.(*dns.A).A = net.ParseIP(ip).To4()
+		rr.(*dns.A).A = "88.88.88.88"
 	case 2:
 		rr = new(dns.AAAA)
 		rr.(*dns.AAAA).Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: state.QClass()}
@@ -52,7 +53,6 @@ func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 		srv.Hdr.Name = "_" + state.Proto() + state.QName()
 	}
 	port, _ := strconv.Atoi(state.Port())
-	port = 8888 //test
 	srv.Port = uint16(port)
 	srv.Target = "."
 
