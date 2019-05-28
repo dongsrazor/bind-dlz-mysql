@@ -40,7 +40,7 @@ func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 		rr = new(dns.A)
 		rr.(*dns.A).Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: state.QClass()}
 		rr.(*dns.A).A = net.ParseIP(ip).To4()
-		rr.(*dns.A).A = net.ParseIP("88.88.88.88").To4()
+		rr.(*dns.A).A = net.ParseIP("8.8.88.88").To4()
 	case 2:
 		rr = new(dns.AAAA)
 		rr.(*dns.AAAA).Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: state.QClass()}
