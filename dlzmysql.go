@@ -7,7 +7,11 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
+	//"os"
 
+	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/request"
 
@@ -21,6 +25,9 @@ type Dlzmysql struct {
 	IPtable []IPrange
 }
 
+var db, err = sql.Open("mysql", "wanghd:smart@tcp(192.168.16.99)/bind9")
+
+
 // ServeDNS implements the plugin.Handler interface.
 func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	state := request.Request{W: w, Req: r}
@@ -30,33 +37,38 @@ func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 	a.Authoritative = true
 
 	ip := state.IP()
-
-	result := queryIP(wh.IPtable, ip)
-	fmt.Println(result)
-	var rr dns.RR
-
-	switch state.Family() {
-	case 1:
-		rr = new(dns.A)
-		rr.(*dns.A).Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: state.QClass()}
-		rr.(*dns.A).A = net.ParseIP(ip).To4()
-		rr.(*dns.A).A = net.ParseIP("8.8.88.88").To4()
-	case 2:
-		rr = new(dns.AAAA)
-		rr.(*dns.AAAA).Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: state.QClass()}
-		rr.(*dns.AAAA).AAAA = net.ParseIP(ip)
+	domain := state.QName()
+	fmt.Println(domain)
+	
+	queryTypeTest := state.QType()
+	if queryTypeTest == dns.TypeA {
+		fmt.Println("查询A记录")
+	} else if queryTypeTest == dns.TypeNS {
+		fmt.Println("查询NS")
+	} else {
 	}
+		fmt.Println(queryTypeTest)
 
-	srv := new(dns.SRV)
-	srv.Hdr = dns.RR_Header{Name: "_" + state.Proto() + "." + state.QName(), Rrtype: dns.TypeSRV, Class: state.QClass()}
-	if state.QName() == "." {
-		srv.Hdr.Name = "_" + state.Proto() + state.QName()
+	view := queryIP(wh.IPtable, ip)
+	fmt.Println(view)
+	queryType := "A"
+
+        var rr dns.RR
+        a.Answer = []dns.RR{}
+
+	records := getAfromDB(domain, queryType, view)
+	for _, value := range records {
+		vs := strings.Split(value, ":")
+		fmt.Println(vs)
+		ip := vs[0]
+		recordTtl := vs[1]
+		val, _ := strconv.ParseUint(recordTtl, 10, 32)
+		ttl := uint32(val)
+                rr = new(dns.A)
+                rr.(*dns.A).Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: state.QClass(), Ttl: ttl}
+                rr.(*dns.A).A = net.ParseIP(ip).To4()
+                a.Answer = append(a.Answer, rr)
 	}
-	port, _ := strconv.Atoi(state.Port())
-	srv.Port = uint16(port)
-	srv.Target = "."
-
-	a.Extra = []dns.RR{rr, srv}
 
 	w.WriteMsg(a)
 
@@ -64,4 +76,68 @@ func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 }
 
 // Name implements the Handler interface.
-func (wh Dlzmysql) Name() string { return "dlzmysql" }
+func (wh Dlzmysql) Name() string { return "dlzmysql" } 
+func getHostZone(domain string) (string, string) {
+	vs := strings.Split(domain, ".")
+	fmt.Println(vs)
+	fmt.Println(len(vs))
+	host := strings.Join(vs[0:len(vs)-3], ".")
+	lo := len(vs)-3
+	hi := len(vs)-1
+	zone := strings.Join(vs[lo:hi], ".")
+	return host, zone
+}
+
+func getAfromDB(domain string, queryType string, view string) ([]string) {
+	records := []string{}
+        host, zone := getHostZone(domain)
+        //queryType := "A"
+        sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
+               "WHERE `host`='"+ host +"' AND `zone`='"+ zone +"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
+        fmt.Println(sql)
+        rows, err := db.Query(sql)
+        for rows.Next() {
+                var host string
+                var zone string
+                var view string
+                var queryType string
+                var data string
+                var ttl string
+                err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
+                if err != nil {
+                        fmt.Println(err)
+                }
+                //fmt.Println(host, zone, view, queryType, data, ttl)
+		records = append(records, data + ":" + ttl)
+
+        }
+	fmt.Println(records)
+	return records
+}
+
+func getCNAMEfromDB(domain string, queryType string, view string) ([]string) {
+        records := []string{}
+        host, zone := getHostZone(domain)
+        //queryType := "A"
+        sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
+               "WHERE `host`='"+ host +"' AND `zone`='"+ zone +"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
+        fmt.Println(sql)
+        rows, err := db.Query(sql)
+        for rows.Next() {
+                var host string
+                var zone string
+                var view string
+                var queryType string
+                var data string
+                var ttl string
+                err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
+                if err != nil {
+                        fmt.Println(err)
+                }
+                //fmt.Println(host, zone, view, queryType, data, ttl)
+                records = append(records, data + ":" + ttl)
+
+        }
+        fmt.Println(records)
+        return records
+}
