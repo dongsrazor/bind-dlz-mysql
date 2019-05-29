@@ -1,4 +1,4 @@
-// Package Dlzmysql implements a plugin that returns details about the resolving
+// Package dlzmysql implements a plugin that returns details about the resolving
 // querying it.
 package dlzmysql
 
@@ -32,25 +32,27 @@ var db, err = sql.Open("mysql", "wanghd:smart@tcp(192.168.16.99)/bind9")
 func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	state := request.Request{W: w, Req: r}
 
+	qname := state.Name()
+	qtype := state.Type()
+	fmt.Println(qname)
+	fmt.Println(qtype)
 	a := new(dns.Msg)
 	a.SetReply(r)
 	a.Authoritative = true
 
 	ip := state.IP()
 	domain := state.QName()
-	fmt.Println(domain)
 	
 	queryTypeTest := state.QType()
 	if queryTypeTest == dns.TypeA {
 		fmt.Println("查询A记录")
-	} else if queryTypeTest == dns.TypeNS {
-		fmt.Println("查询NS")
+	} else if queryTypeTest == dns.TypeCNAME {
+		fmt.Println("查询CNAME")
 	} else {
-	}
 		fmt.Println(queryTypeTest)
+	}
 
 	view := queryIP(wh.IPtable, ip)
-	fmt.Println(view)
 	queryType := "A"
 
         var rr dns.RR
@@ -59,10 +61,9 @@ func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 	records := getAfromDB(domain, queryType, view)
 	for _, value := range records {
 		vs := strings.Split(value, ":")
-		fmt.Println(vs)
 		ip := vs[0]
-		recordTtl := vs[1]
-		val, _ := strconv.ParseUint(recordTtl, 10, 32)
+		recordTTL := vs[1]
+		val, _ := strconv.ParseUint(recordTTL, 10, 32)
 		ttl := uint32(val)
                 rr = new(dns.A)
                 rr.(*dns.A).Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: state.QClass(), Ttl: ttl}
@@ -77,15 +78,16 @@ func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 
 // Name implements the Handler interface.
 func (wh Dlzmysql) Name() string { return "dlzmysql" } 
-func getHostZone(domain string) (string, string) {
+
+func getHostZone(domain string) (host, zone string) {
 	vs := strings.Split(domain, ".")
-	fmt.Println(vs)
-	fmt.Println(len(vs))
-	host := strings.Join(vs[0:len(vs)-3], ".")
-	lo := len(vs)-3
-	hi := len(vs)-1
-	zone := strings.Join(vs[lo:hi], ".")
-	return host, zone
+	//fmt.Println(vs)
+	//fmt.Println(len(vs))
+	host = strings.Join(vs[0:len(vs)-3], ".")
+	begin := len(vs)-3
+	end := len(vs)-1
+	zone = strings.Join(vs[begin:end], ".")
+	return
 }
 
 func getAfromDB(domain string, queryType string, view string) ([]string) {
@@ -94,7 +96,7 @@ func getAfromDB(domain string, queryType string, view string) ([]string) {
         //queryType := "A"
         sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
                "WHERE `host`='"+ host +"' AND `zone`='"+ zone +"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
-        fmt.Println(sql)
+        //fmt.Println(sql)
         rows, err := db.Query(sql)
         for rows.Next() {
                 var host string
@@ -118,10 +120,9 @@ func getAfromDB(domain string, queryType string, view string) ([]string) {
 func getCNAMEfromDB(domain string, queryType string, view string) ([]string) {
         records := []string{}
         host, zone := getHostZone(domain)
-        //queryType := "A"
         sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
                "WHERE `host`='"+ host +"' AND `zone`='"+ zone +"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
-        fmt.Println(sql)
+        //fmt.Println(sql)
         rows, err := db.Query(sql)
         for rows.Next() {
                 var host string
