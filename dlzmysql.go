@@ -291,6 +291,9 @@ func getHostZone(domain string) (host, zone string) {
 }
 
 func (dlz Dlzmysql) connect() (*sql.DB, error) {
-	db, err := sql.Open("mysql", "wanghd:smart@tcp(192.168.16.99)/bind9")
+	dsn := "wanghd:smart@tcp(192.168.16.99)/bind9?timeout=1s&readTimeout=1s"
+	db, err := sql.Open("mysql", dsn)
+	db.SetMaxOpenConns(2048)
+	db.SetMaxIdleConns(1024)
 	return db, err
 }
