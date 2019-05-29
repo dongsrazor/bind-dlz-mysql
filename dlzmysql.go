@@ -3,7 +3,7 @@
 package dlzmysql
 
 import (
-	"context"
+	//"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -12,72 +12,272 @@ import (
 
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
+
 	"github.com/coredns/coredns/plugin"
-	"github.com/coredns/coredns/request"
+	//"github.com/coredns/coredns/request"
 
 	"github.com/miekg/dns"
 )
 
-// Dlzmysql is a plugin that returns your IP address, port and the protocol used for connecting
-// to CoreDNS.
+//Dlzmysql 定义
 type Dlzmysql struct {
 	Next    plugin.Handler
+	DB	*sql.DB
 	IPtable []IPrange
 }
 
-var db, err = sql.Open("mysql", "wanghd:smart@tcp(192.168.16.99)/bind9")
+//从mysql中查询A/AAAA/CNAME记录
+func (dlz Dlzmysql) get(domain string, queryType string, view string) (records []string) {
+	host, zone := getHostZone(domain)
+	sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
+	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
+	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
+	rows, err := dlz.DB.Query(sql)
+        for rows.Next() {
+                var host string
+                var zone string
+                var view string
+                var queryType string
+                var data string
+                var ttl string
+                err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
+                if err != nil {
+                        fmt.Println(err)
+                }
+		records = append(records, data + ":" + ttl)
 
-
-// ServeDNS implements the plugin.Handler interface.
-func (wh Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
-	state := request.Request{W: w, Req: r}
-
-	qname := state.Name()
-	qtype := state.Type()
-	fmt.Println(qname)
-	fmt.Println(qtype)
-	a := new(dns.Msg)
-	a.SetReply(r)
-	a.Authoritative = true
-
-	ip := state.IP()
-	domain := state.QName()
-	
-	queryTypeTest := state.QType()
-	if queryTypeTest == dns.TypeA {
-		fmt.Println("查询A记录")
-	} else if queryTypeTest == dns.TypeCNAME {
-		fmt.Println("查询CNAME")
-	} else {
-		fmt.Println(queryTypeTest)
-	}
-
-	view := queryIP(wh.IPtable, ip)
-	queryType := "A"
-
-        var rr dns.RR
-        a.Answer = []dns.RR{}
-
-	records := getAfromDB(domain, queryType, view)
-	for _, value := range records {
-		vs := strings.Split(value, ":")
-		ip := vs[0]
-		recordTTL := vs[1]
-		val, _ := strconv.ParseUint(recordTTL, 10, 32)
-		ttl := uint32(val)
-                rr = new(dns.A)
-                rr.(*dns.A).Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeA, Class: state.QClass(), Ttl: ttl}
-                rr.(*dns.A).A = net.ParseIP(ip).To4()
-                a.Answer = append(a.Answer, rr)
-	}
-
-	w.WriteMsg(a)
-
-	return 0, nil
+        }
+	return
 }
 
-// Name implements the Handler interface.
-func (wh Dlzmysql) Name() string { return "dlzmysql" } 
+//从mysql中查询NS记录
+func (dlz Dlzmysql) getNS(domain string, queryType string, view string) (records []string) {
+	_, zone := getHostZone(domain)
+	host := "@"
+	sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
+	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
+	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
+	rows, err := dlz.DB.Query(sql)
+        for rows.Next() {
+                var host string
+                var zone string
+                var view string
+                var queryType string
+                var data string
+                var ttl string
+                err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
+                if err != nil {
+                        fmt.Println(err)
+                }
+		records = append(records, data + ":" + ttl)
+        }
+	return	
+}
+
+//从mysql中查询MX记录
+func (dlz Dlzmysql) getMX(domain string, queryType string, view string) (records []string) {
+	_, zone := getHostZone(domain)
+	host := "@"
+	sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `mx_priority`, `ttl` FROM `dns_record` " +
+	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
+	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
+	rows, err := dlz.DB.Query(sql)
+        for rows.Next() {
+                var host string
+                var zone string
+                var view string
+                var queryType string
+		var data string
+		var mxPriority string
+                var ttl string
+                err = rows.Scan(&host, &zone, &view, &queryType, &data, &mxPriority, &ttl)
+                if err != nil {
+                        fmt.Println(err)
+                }
+		records = append(records, data + ":" + mxPriority + ":" + ttl)
+        }
+	return	
+}
+
+//从mysql中查询SOA记录
+func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) (records []string) {
+	_, zone := getHostZone(domain)
+	host := "@"
+	sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl`, `resp_person`, `serial`, `refresh`, `retry`, `expire`, `minimum` FROM `dns_record` " +
+	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
+	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
+	rows, err := dlz.DB.Query(sql)
+        for rows.Next() {
+                var host string
+                var zone string
+                var view string
+                var queryType string
+		var data string
+		var ttl string
+		var respPersion string
+		var serial string
+		var refresh string
+		var retry string
+		var expire string
+		var minimum string
+                err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl, &respPersion, &serial, &refresh, &retry, &expire, &minimum)
+                if err != nil {
+                        fmt.Println(err)
+                }
+		records = append(records, data + ":" + respPersion + ":" + ttl + ":" + serial + ":" + refresh + ":" + retry + ":" + expire + ":" + minimum)
+        }
+	return	
+}
+
+//A 记录
+func (dlz *Dlzmysql) A(name string, records []string) (answers, extras []dns.RR) {
+	for _, a := range records {
+		vals := strings.Split(a, ":")
+		ip := vals[0]
+		t := vals[1]
+		
+		val, _ := strconv.ParseUint(t, 10, 32)
+		ttl := uint32(val)
+		
+		var rr dns.RR
+		rr = new(dns.A)
+		rr.(*dns.A).Hdr = dns.RR_Header{Name: name, Rrtype: dns.TypeA,
+			Class: dns.ClassINET, Ttl: ttl}
+		rr.(*dns.A).A = net.ParseIP(ip).To4()
+		answers = append(answers, rr)
+	}
+	return
+}
+
+//AAAA 记录
+func (dlz *Dlzmysql) AAAA(name string, records []string) (answers, extras []dns.RR) {
+	for _, aaaa := range records {
+		vals := strings.Split(aaaa, ":")
+		ip := vals[0]
+		t := vals[1]
+		
+		val, _ := strconv.ParseUint(t, 10, 32)
+		ttl := uint32(val)
+		
+		var rr dns.RR
+		rr = new(dns.AAAA)
+		rr.(*dns.AAAA).Hdr = dns.RR_Header{Name: name, Rrtype: dns.TypeAAAA,
+			Class: dns.ClassINET, Ttl: ttl}
+		rr.(*dns.AAAA).AAAA = net.ParseIP(ip)
+		answers = append(answers, rr)
+	}
+	return
+}
+
+//CNAME 记录
+func (dlz *Dlzmysql) CNAME(name string, records []string) (answers, extras []dns.RR) {
+	for _, cname := range records {
+		vals := strings.Split(cname, ":")
+		fqdn := vals[0]
+		t := vals[1]
+		
+		val, _ := strconv.ParseUint(t, 10, 32)
+		ttl := uint32(val)
+		
+		var rr dns.RR
+		rr = new(dns.CNAME)
+		rr.(*dns.CNAME).Hdr = dns.RR_Header{Name: name, Rrtype: dns.TypeCNAME,
+			Class: dns.ClassINET, Ttl: ttl}
+		rr.(*dns.CNAME).Target = fqdn
+		answers = append(answers, rr)
+	}
+	return
+}
+
+//NS 记录
+func (dlz *Dlzmysql) NS(name string, records []string) (answers, extras []dns.RR) {
+	for _, ns := range records {
+		vals := strings.Split(ns, ":")
+		fqdn := vals[0]
+		t := vals[1]
+		
+		val, _ := strconv.ParseUint(t, 10, 32)
+		ttl := uint32(val)
+		
+		var rr dns.RR
+		rr = new(dns.NS)
+		rr.(*dns.NS).Hdr = dns.RR_Header{Name: name, Rrtype: dns.TypeNS,
+			Class: dns.ClassINET, Ttl: ttl}
+		rr.(*dns.NS).Ns = fqdn
+		answers = append(answers, rr)
+	}
+	return
+}
+
+//MX 记录
+func (dlz *Dlzmysql) MX(name string, records []string) (answers, extras []dns.RR) {
+	for _, mx := range records {
+		vals := strings.Split(mx, ":")
+		fqdn := vals[0]
+		mxPriority := vals[1]
+		t := vals[2]
+		
+		val, _ := strconv.ParseUint(t, 10, 32)
+		ttl := uint32(val)		
+		valPriority, _ := strconv.ParseUint(mxPriority, 10, 16)
+		priority := uint16(valPriority)
+
+		rr := new(dns.MX)
+		rr.Hdr = dns.RR_Header{Name: name, Rrtype: dns.TypeMX,
+			Class: dns.ClassINET, Ttl: ttl}
+		rr.Mx = fqdn
+		rr.Preference = priority
+		answers = append(answers, rr)
+	}
+	return
+}
+
+//SOA 记录
+func (dlz *Dlzmysql) SOA(name string, records []string) (answers, extras []dns.RR) {
+	for _, soa := range records {
+		vals := strings.Split(soa, ":")
+		ns := vals[0]
+		mbox := vals[1]
+		
+		ttlString := vals[2]
+		ttlUint, _ := strconv.ParseUint(ttlString, 10, 32)
+		ttl := uint32(ttlUint)		
+
+		serialString := vals[3]
+		serialUint, _ := strconv.ParseUint(serialString, 10, 32)
+		serial := uint32(serialUint)
+		
+		refreshString := vals[4]
+		refreshUint, _ := strconv.ParseUint(refreshString, 10, 32)
+		refresh := uint32(refreshUint)
+		
+		retryString := vals[5]
+		retryUint, _ := strconv.ParseUint(retryString, 10, 32)
+		retry := uint32(retryUint)
+		
+		expireString := vals[6]
+		expireUint, _ := strconv.ParseUint(expireString, 10, 32)
+		expire := uint32(expireUint)
+
+		minimumString := vals[7]
+		minimumUint, _ := strconv.ParseUint(minimumString, 10, 32)
+		minimum := uint32(minimumUint)
+
+		rr := new(dns.SOA)
+		rr.Hdr = dns.RR_Header{Name: name, Rrtype: dns.TypeSOA,
+			Class: dns.ClassINET, Ttl: ttl}
+		rr.Ns = ns
+		rr.Mbox = mbox
+		rr.Serial = serial
+		rr.Refresh = refresh
+		rr.Retry = retry
+		rr.Expire = expire
+		rr.Minttl = minimum
+
+		answers = append(answers, rr)
+	}
+	return
+}
 
 func getHostZone(domain string) (host, zone string) {
 	vs := strings.Split(domain, ".")
@@ -90,55 +290,7 @@ func getHostZone(domain string) (host, zone string) {
 	return
 }
 
-func getAfromDB(domain string, queryType string, view string) ([]string) {
-	records := []string{}
-        host, zone := getHostZone(domain)
-        //queryType := "A"
-        sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
-               "WHERE `host`='"+ host +"' AND `zone`='"+ zone +"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
-        //fmt.Println(sql)
-        rows, err := db.Query(sql)
-        for rows.Next() {
-                var host string
-                var zone string
-                var view string
-                var queryType string
-                var data string
-                var ttl string
-                err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
-                if err != nil {
-                        fmt.Println(err)
-                }
-                //fmt.Println(host, zone, view, queryType, data, ttl)
-		records = append(records, data + ":" + ttl)
-
-        }
-	fmt.Println(records)
-	return records
-}
-
-func getCNAMEfromDB(domain string, queryType string, view string) ([]string) {
-        records := []string{}
-        host, zone := getHostZone(domain)
-        sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
-               "WHERE `host`='"+ host +"' AND `zone`='"+ zone +"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
-        //fmt.Println(sql)
-        rows, err := db.Query(sql)
-        for rows.Next() {
-                var host string
-                var zone string
-                var view string
-                var queryType string
-                var data string
-                var ttl string
-                err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
-                if err != nil {
-                        fmt.Println(err)
-                }
-                //fmt.Println(host, zone, view, queryType, data, ttl)
-                records = append(records, data + ":" + ttl)
-
-        }
-        fmt.Println(records)
-        return records
+func (dlz Dlzmysql) connect() (*sql.DB, error) {
+	db, err := sql.Open("mysql", "wanghd:smart@tcp(192.168.16.99)/bind9")
+	return db, err
 }

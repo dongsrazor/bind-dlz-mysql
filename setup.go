@@ -3,7 +3,6 @@ package dlzmysql
 import (
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
-
 	"github.com/mholt/caddy"
 )
 
@@ -20,8 +19,10 @@ func setup(c *caddy.Controller) error {
 		return plugin.Error("dlzmysql", c.ArgErr())
 	}
 	iptable := loadIPtable()
+	dlzmysql := Dlzmysql{}
+	db, _ := dlzmysql.connect()
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
-		return Dlzmysql{Next: next, IPtable: iptable}
+		return Dlzmysql{Next: next, DB: db, IPtable: iptable}
 	})
 
 	return nil

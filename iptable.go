@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+//IPrange IP段定义
 type IPrange struct {
 	startip  string
 	endip    string
