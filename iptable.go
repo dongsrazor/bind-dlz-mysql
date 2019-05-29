@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-//IPrange IP段定义
+//IPrange IP段
 type IPrange struct {
 	startip  string
 	endip    string
@@ -34,8 +34,7 @@ func ipTouint32(ipnr net.IP) uint32 {
 	return sum
 }
 
-func loadIPtable() []IPrange {
-	iptable := []IPrange{}
+func loadIPtable() (iptable []IPrange) {
 	inputFile, inputError := os.Open("funshion.view.dat")
 	if inputError != nil {
 		fmt.Printf("funshion.view.dat not found\n")
@@ -65,7 +64,7 @@ func loadIPtable() []IPrange {
 
 }
 
-func queryIP(iptable []IPrange, ip string) string {
+func queryIP(iptable []IPrange, ip string) (view string) {
 	ipstring := net.ParseIP(ip)
 	ipint := ipTouint32(ipstring)
 	lid := 0
@@ -80,8 +79,8 @@ func queryIP(iptable []IPrange, ip string) string {
 		} else if ipint > endint {
 			lid = mid + 1
 		} else {
-			view := iptable[mid].view
-			return view
+			view = iptable[mid].view
+			return
 		}
 	}
 }
