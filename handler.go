@@ -4,8 +4,8 @@ package dlzmysql
 
 import (
 	"context"
-	//"fmt"
-	//"net"
+	"strings"
+	"fmt"
 
 	"github.com/coredns/coredns/request"
 
@@ -19,7 +19,7 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 	//qname := state.Name()
 	qtype := state.Type()
 	domain := state.QName()
-	//fmt.Println(domain, qname, qtype)
+	fmt.Println(domain, qname, qtype)
 	
 	a := new(dns.Msg)
 	a.SetReply(r)
@@ -28,13 +28,34 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 
 	ip := state.IP()
 	view := queryIP(dlz.IPtable, ip)
+	
 	answers := []dns.RR{}
 	extras := []dns.RR{}
 
 	switch qtype {
 	case "A":
-		records := dlz.get(domain, qtype, view)
-		answers, extras = dlz.A(domain, records)
+		//A->CNAME 直至找到最终解析
+		for {
+			rs := dlz.get(domain, "A", view)
+			if len(rs) == 0 {
+				rs := dlz.get(domain, "CNAME", view)
+				if len(rs) == 0 {
+					break
+				} else if len(rs) == 1 {
+					ans, _ := dlz.CNAME(domain, rs)
+					answers = append(answers, ans...)
+					values := strings.Split(rs[0], ":")
+					domain = values[2]
+				} else {
+					break
+				}
+			} else {
+				ans, _ := dlz.A(domain, rs)
+				roundRobinAnswers := roundRobin(ans)	//轮询返回A记录
+				answers = append(answers, roundRobinAnswers...)
+				break
+			}
+		}
 	case "CNAME":
 		records := dlz.get(domain, qtype, view)
 		answers, extras = dlz.CNAME(domain, records)
