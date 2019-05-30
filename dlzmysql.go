@@ -31,7 +31,7 @@ type Dlzmysql struct {
 }
 
 //从mysql中查询A/AAAA/CNAME记录
-func (dlz *Dlzmysql) get(domain string, queryType string, view string) (records []string) {
+func (dlz Dlzmysql) get(domain string, queryType string, view string) (records []string) {
 	host, zone := getHostZone(domain)
 	sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
 	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
@@ -49,7 +49,8 @@ func (dlz *Dlzmysql) get(domain string, queryType string, view string) (records 
 		if err != nil {
 			fmt.Println(err)
 		}
-		records = append(records, data + ":" + ttl)
+		r := strings.Join([]string{domain, queryType, data, ttl}, ":")
+		records = append(records, r)
 	}
 	return
 }
@@ -73,7 +74,8 @@ func (dlz Dlzmysql) getNS(domain string, queryType string, view string) (records
 		if err != nil {
 			fmt.Println(err)
 		}
-		records = append(records, data + ":" + ttl)
+		r := strings.Join([]string{domain, queryType, data, ttl}, ":")
+		records = append(records, r)
 	}
 	return	
 }
@@ -98,7 +100,8 @@ func (dlz Dlzmysql) getMX(domain string, queryType string, view string) (records
 		if err != nil {
 			fmt.Println(err)
 		}
-		records = append(records, data + ":" + mxPriority + ":" + ttl)
+		r := strings.Join([]string{domain, queryType, data, mxPriority, ttl}, ":")
+		records = append(records, r)
 	}
 	return	
 }
@@ -127,32 +130,32 @@ func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) (record
         err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl, &respPersion, &serial, &refresh, &retry, &expire, &minimum)
         if err != nil {
             fmt.Println(err)
-        }
-	records = append(records, data + ":" + respPersion + ":" + ttl + ":" + serial + ":" + refresh + ":" + retry + ":" + expire + ":" + minimum)
+		}
+		r := strings.Join([]string{domain, queryType, data, respPersion, ttl, serial, refresh, retry, expire, minimum}, ":")
+		records = append(records, r)
     }
 	return	
 }
 
 //A 记录
 func (dlz *Dlzmysql) A(name string, records []string) (answers, extras []dns.RR) {
-	ans := []dns.RR{}
 	for _, a := range records {
 		vals := strings.Split(a, ":")
-		ip := vals[0]
-		t := vals[1]
-		
-		val, _ := strconv.ParseUint(t, 10, 32)
+		domain := vals[0]
+		queryType :=vals[1]
+		data := vals[2]
+		ttlString := vals[3]
+		val, _ := strconv.ParseUint(ttlString, 10, 32)
 		ttl := uint32(val)
 		
 		var rr dns.RR
 		rr = new(dns.A)
-		rr.(*dns.A).Hdr = dns.RR_Header{Name: name, Rrtype: dns.TypeA,
+		rr.(*dns.A).Hdr = dns.RR_Header{Name: domain, Rrtype: dns.TypeA,
 			Class: dns.ClassINET, Ttl: ttl}
-		rr.(*dns.A).A = net.ParseIP(ip).To4()
-		ans = append(ans, rr)
+		rr.(*dns.A).A = net.ParseIP(data).To4()
+		answers = append(answers, rr)			
 
 	}
-	answers = roundRobin(ans)
 	return
 }
 
@@ -160,17 +163,19 @@ func (dlz *Dlzmysql) A(name string, records []string) (answers, extras []dns.RR)
 func (dlz *Dlzmysql) AAAA(name string, records []string) (answers, extras []dns.RR) {
 	for _, aaaa := range records {
 		vals := strings.Split(aaaa, ":")
-		ip := vals[0]
-		t := vals[1]
+		//domain := vals[0]
+		//queryType := vals[1]
+		data := vals[2]
+		ttlString := vals[3]
 		
-		val, _ := strconv.ParseUint(t, 10, 32)
+		val, _ := strconv.ParseUint(ttlString, 10, 32)
 		ttl := uint32(val)
 		
 		var rr dns.RR
 		rr = new(dns.AAAA)
 		rr.(*dns.AAAA).Hdr = dns.RR_Header{Name: name, Rrtype: dns.TypeAAAA,
 			Class: dns.ClassINET, Ttl: ttl}
-		rr.(*dns.AAAA).AAAA = net.ParseIP(ip)
+		rr.(*dns.AAAA).AAAA = net.ParseIP(data)
 		answers = append(answers, rr)
 	}
 	return
@@ -180,10 +185,12 @@ func (dlz *Dlzmysql) AAAA(name string, records []string) (answers, extras []dns.
 func (dlz *Dlzmysql) CNAME(name string, records []string) (answers, extras []dns.RR) {
 	for _, cname := range records {
 		vals := strings.Split(cname, ":")
-		fqdn := vals[0]
-		t := vals[1]
+		//domain := vals[0]
+		//queryType := vals[1]
+		fqdn := vals[2]
+		ttlString := vals[3]
 		
-		val, _ := strconv.ParseUint(t, 10, 32)
+		val, _ := strconv.ParseUint(ttlString, 10, 32)
 		ttl := uint32(val)
 		
 		var rr dns.RR
@@ -200,10 +207,12 @@ func (dlz *Dlzmysql) CNAME(name string, records []string) (answers, extras []dns
 func (dlz *Dlzmysql) NS(name string, records []string) (answers, extras []dns.RR) {
 	for _, ns := range records {
 		vals := strings.Split(ns, ":")
-		fqdn := vals[0]
-		t := vals[1]
+		//domain := vals[0]
+		//queryType := vals[1]
+		fqdn := vals[2]
+		ttlString := vals[3]
 		
-		val, _ := strconv.ParseUint(t, 10, 32)
+		val, _ := strconv.ParseUint(ttlString, 10, 32)
 		ttl := uint32(val)
 		
 		var rr dns.RR
@@ -220,11 +229,13 @@ func (dlz *Dlzmysql) NS(name string, records []string) (answers, extras []dns.RR
 func (dlz *Dlzmysql) MX(name string, records []string) (answers, extras []dns.RR) {
 	for _, mx := range records {
 		vals := strings.Split(mx, ":")
-		fqdn := vals[0]
-		mxPriority := vals[1]
-		t := vals[2]
+		//domain := vals[0]
+		//queryType := vals[1]
+		fqdn := vals[2]
+		mxPriority := vals[3]
+		ttlString := vals[4]
 		
-		val, _ := strconv.ParseUint(t, 10, 32)
+		val, _ := strconv.ParseUint(ttlString, 10, 32)
 		ttl := uint32(val)		
 		valPriority, _ := strconv.ParseUint(mxPriority, 10, 16)
 		priority := uint16(valPriority)
@@ -243,30 +254,32 @@ func (dlz *Dlzmysql) MX(name string, records []string) (answers, extras []dns.RR
 func (dlz *Dlzmysql) SOA(name string, records []string) (answers, extras []dns.RR) {
 	for _, soa := range records {
 		vals := strings.Split(soa, ":")
-		ns := vals[0]
-		mbox := vals[1]
+		//domain := vals[0]
+		//queryType := vals[1]
+		ns := vals[2]
+		mbox := vals[3]
 		
-		ttlString := vals[2]
+		ttlString := vals[4]
 		ttlUint, _ := strconv.ParseUint(ttlString, 10, 32)
 		ttl := uint32(ttlUint)		
 
-		serialString := vals[3]
+		serialString := vals[5]
 		serialUint, _ := strconv.ParseUint(serialString, 10, 32)
 		serial := uint32(serialUint)
 		
-		refreshString := vals[4]
+		refreshString := vals[6]
 		refreshUint, _ := strconv.ParseUint(refreshString, 10, 32)
 		refresh := uint32(refreshUint)
 		
-		retryString := vals[5]
+		retryString := vals[7]
 		retryUint, _ := strconv.ParseUint(retryString, 10, 32)
 		retry := uint32(retryUint)
 		
-		expireString := vals[6]
+		expireString := vals[8]
 		expireUint, _ := strconv.ParseUint(expireString, 10, 32)
 		expire := uint32(expireUint)
 
-		minimumString := vals[7]
+		minimumString := vals[9]
 		minimumUint, _ := strconv.ParseUint(minimumString, 10, 32)
 		minimum := uint32(minimumUint)
 
