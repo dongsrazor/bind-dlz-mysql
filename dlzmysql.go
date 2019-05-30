@@ -142,7 +142,7 @@ func (dlz *Dlzmysql) A(name string, records []string) (answers, extras []dns.RR)
 	for _, a := range records {
 		vals := strings.Split(a, ":")
 		domain := vals[0]
-		queryType :=vals[1]
+		//queryType :=vals[1]
 		data := vals[2]
 		ttlString := vals[3]
 		val, _ := strconv.ParseUint(ttlString, 10, 32)
@@ -300,11 +300,11 @@ func (dlz *Dlzmysql) SOA(name string, records []string) (answers, extras []dns.R
 }
 
 func getHostZone(domain string) (host, zone string) {
-	vs := strings.Split(domain, ".")
-	host = strings.Join(vs[0:len(vs)-3], ".")
-	begin := len(vs)-3
-	end := len(vs)-1
-	zone = strings.Join(vs[begin:end], ".")
+	name := strings.TrimRight(domain, ".")
+	vals := strings.Split(name, ".")
+	length := len(vals)
+	host = strings.Join(vals[0:length-2], ".")
+	zone = strings.Join(vals[length-2:], ".")
 	return
 }
 

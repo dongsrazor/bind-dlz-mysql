@@ -16,7 +16,7 @@ import (
 func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	state := request.Request{W: w, Req: r}
 
-	//qname := state.Name()
+	qname := state.Name()
 	qtype := state.Type()
 	domain := state.QName()
 	fmt.Println(domain, qname, qtype)
