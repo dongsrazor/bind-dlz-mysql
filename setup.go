@@ -4,6 +4,7 @@ import (
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
 	"github.com/mholt/caddy"
+	//"fmt"
 )
 
 func init() {
@@ -14,16 +15,63 @@ func init() {
 }
 
 func setup(c *caddy.Controller) error {
-	c.Next() // 'dlzmysql'
-	if c.NextArg() {
-		return plugin.Error("dlzmysql", c.ArgErr())
+	//c.Next() // 'dlzmysql'
+	r, err := dlzmysqlParse(c)
+	if err != nil {
+		return plugin.Error("dlzmysql", err)
 	}
+
+	db, _ := r.connect()
 	iptable := loadIPtable()
-	dlzmysql := Dlzmysql{}
-	db, _ := dlzmysql.connect()
+
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
-		return Dlzmysql{Next: next, DB: db, IPtable: iptable}
+		r.Next = next
+		r.DB = db
+		r.IPtable = iptable
+		return r
 	})
 
 	return nil
+}
+
+func dlzmysqlParse(c *caddy.Controller) (*Dlzmysql, error) {
+	dlzmysql := Dlzmysql {}
+	for c.Next() {
+		if c.NextBlock() {
+			for {
+				switch c.Val() {
+				case "address":
+					if !c.NextArg() {
+						return &Dlzmysql{}, c.ArgErr()
+					}
+					dlzmysql.mysqlAddress = c.Val()
+				case "user":
+					if !c.NextArg() {
+						return &Dlzmysql{}, c.ArgErr()
+					}
+					dlzmysql.mysqlUser = c.Val()
+				case "password":
+					if !c.NextArg() {
+						return &Dlzmysql{}, c.ArgErr()
+					}
+					dlzmysql.mysqlPassword = c.Val()
+				case "db":
+					if !c.NextArg() {
+						return &Dlzmysql{}, c.ArgErr()
+					}
+					dlzmysql.mysqlDB = c.Val()
+				default:
+					if c.Val() != "}" {
+						return &Dlzmysql{}, c.Errf("unknown property '%s'", c.Val())
+					}
+				}
+				if !c.Next() {
+					break
+				}
+			}
+
+		}
+		return &dlzmysql, nil
+	}
+	return &Dlzmysql{}, nil
 }

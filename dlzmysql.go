@@ -21,13 +21,17 @@ import (
 
 //Dlzmysql 定义
 type Dlzmysql struct {
-	Next    plugin.Handler
-	DB	*sql.DB
-	IPtable []IPrange
+	Next    		plugin.Handler
+	DB				*sql.DB
+	mysqlAddress	string
+	mysqlUser		string
+	mysqlPassword	string
+	mysqlDB			string
+	IPtable 		[]IPrange
 }
 
 //从mysql中查询A/AAAA/CNAME记录
-func (dlz Dlzmysql) get(domain string, queryType string, view string) (records []string) {
+func (dlz *Dlzmysql) get(domain string, queryType string, view string) (records []string) {
 	host, zone := getHostZone(domain)
 	sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
 	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
@@ -281,8 +285,6 @@ func (dlz *Dlzmysql) SOA(name string, records []string) (answers, extras []dns.R
 
 func getHostZone(domain string) (host, zone string) {
 	vs := strings.Split(domain, ".")
-	//fmt.Println(vs)
-	//fmt.Println(len(vs))
 	host = strings.Join(vs[0:len(vs)-3], ".")
 	begin := len(vs)-3
 	end := len(vs)-1
@@ -290,8 +292,10 @@ func getHostZone(domain string) (host, zone string) {
 	return
 }
 
-func (dlz Dlzmysql) connect() (*sql.DB, error) {
-	dsn := "wanghd:smart@tcp(192.168.16.99)/bind9?timeout=1s&readTimeout=1s"
+func (dlz *Dlzmysql) connect() (*sql.DB, error) {
+	dsn := dlz.mysqlUser + ":" + dlz.mysqlPassword + "@tcp(" + dlz.mysqlAddress + ")/" + dlz.mysqlDB + "?timeout=1s&readTimeout=1s"
+	//dsn := "wanghd:smart@tcp(192.168.16.99:3306)/bind9?timeout=1s&readTimeout=1s"
+	fmt.Println(dsn)
 	db, err := sql.Open("mysql", dsn)
 	db.SetMaxOpenConns(2048)
 	db.SetMaxIdleConns(1024)

@@ -13,7 +13,7 @@ import (
 )
 
 // ServeDNS implements the plugin.Handler interface.
-func (dlz Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
+func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	state := request.Request{W: w, Req: r}
 
 	//qname := state.Name()
@@ -28,7 +28,6 @@ func (dlz Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.M
 
 	ip := state.IP()
 	view := queryIP(dlz.IPtable, ip)
-
 	answers := []dns.RR{}
 	extras := []dns.RR{}
 
