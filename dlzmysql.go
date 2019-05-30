@@ -37,20 +37,20 @@ func (dlz *Dlzmysql) get(domain string, queryType string, view string) (records 
 	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
 	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
 	rows, err := dlz.DB.Query(sql)
-        for rows.Next() {
-                var host string
-                var zone string
-                var view string
-                var queryType string
-                var data string
-                var ttl string
-                err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
-                if err != nil {
-                        fmt.Println(err)
-                }
-		records = append(records, data + ":" + ttl)
 
-        }
+	for rows.Next() {
+		var host string
+		var zone string
+		var view string
+		var queryType string
+		var data string
+		var ttl string
+		err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
+		if err != nil {
+			fmt.Println(err)
+		}
+		records = append(records, data + ":" + ttl)
+	}
 	return
 }
 
@@ -62,19 +62,19 @@ func (dlz Dlzmysql) getNS(domain string, queryType string, view string) (records
 	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
 	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
 	rows, err := dlz.DB.Query(sql)
-        for rows.Next() {
-                var host string
-                var zone string
-                var view string
-                var queryType string
-                var data string
-                var ttl string
-                err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
-                if err != nil {
-                        fmt.Println(err)
-                }
+	for rows.Next() {
+		var host string
+		var zone string
+		var view string
+		var queryType string
+		var data string
+		var ttl string
+		err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
+		if err != nil {
+			fmt.Println(err)
+		}
 		records = append(records, data + ":" + ttl)
-        }
+	}
 	return	
 }
 
@@ -86,20 +86,20 @@ func (dlz Dlzmysql) getMX(domain string, queryType string, view string) (records
 	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
 	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
 	rows, err := dlz.DB.Query(sql)
-        for rows.Next() {
-                var host string
-                var zone string
-                var view string
-                var queryType string
+	for rows.Next() {
+		var host string
+		var zone string
+		var view string
+		var queryType string
 		var data string
 		var mxPriority string
-                var ttl string
-                err = rows.Scan(&host, &zone, &view, &queryType, &data, &mxPriority, &ttl)
-                if err != nil {
-                        fmt.Println(err)
-                }
+		var ttl string
+		err = rows.Scan(&host, &zone, &view, &queryType, &data, &mxPriority, &ttl)
+		if err != nil {
+			fmt.Println(err)
+		}
 		records = append(records, data + ":" + mxPriority + ":" + ttl)
-        }
+	}
 	return	
 }
 
@@ -111,11 +111,11 @@ func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) (record
 	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
 	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
 	rows, err := dlz.DB.Query(sql)
-        for rows.Next() {
-                var host string
-                var zone string
-                var view string
-                var queryType string
+	for rows.Next() {
+		var host string
+		var zone string
+		var view string
+		var queryType string
 		var data string
 		var ttl string
 		var respPersion string
@@ -124,17 +124,18 @@ func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) (record
 		var retry string
 		var expire string
 		var minimum string
-                err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl, &respPersion, &serial, &refresh, &retry, &expire, &minimum)
-                if err != nil {
-                        fmt.Println(err)
-                }
-		records = append(records, data + ":" + respPersion + ":" + ttl + ":" + serial + ":" + refresh + ":" + retry + ":" + expire + ":" + minimum)
+        err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl, &respPersion, &serial, &refresh, &retry, &expire, &minimum)
+        if err != nil {
+            fmt.Println(err)
         }
+	records = append(records, data + ":" + respPersion + ":" + ttl + ":" + serial + ":" + refresh + ":" + retry + ":" + expire + ":" + minimum)
+    }
 	return	
 }
 
 //A 记录
 func (dlz *Dlzmysql) A(name string, records []string) (answers, extras []dns.RR) {
+	ans := []dns.RR{}
 	for _, a := range records {
 		vals := strings.Split(a, ":")
 		ip := vals[0]
@@ -148,8 +149,10 @@ func (dlz *Dlzmysql) A(name string, records []string) (answers, extras []dns.RR)
 		rr.(*dns.A).Hdr = dns.RR_Header{Name: name, Rrtype: dns.TypeA,
 			Class: dns.ClassINET, Ttl: ttl}
 		rr.(*dns.A).A = net.ParseIP(ip).To4()
-		answers = append(answers, rr)
+		ans = append(ans, rr)
+
 	}
+	answers = roundRobin(ans)
 	return
 }
 
@@ -290,6 +293,53 @@ func getHostZone(domain string) (host, zone string) {
 	end := len(vs)-1
 	zone = strings.Join(vs[begin:end], ".")
 	return
+}
+
+func roundRobin(in []dns.RR) []dns.RR {
+	cname := []dns.RR{}
+	address := []dns.RR{}
+	mx := []dns.RR{}
+	rest := []dns.RR{}
+	for _, r := range in {
+		switch r.Header().Rrtype {
+		case dns.TypeCNAME:
+			cname = append(cname, r)
+		case dns.TypeA, dns.TypeAAAA:
+			address = append(address, r)
+		case dns.TypeMX:
+			mx = append(mx, r)
+		default:
+			rest = append(rest, r)
+		}
+	}
+
+	roundRobinShuffle(address)
+	roundRobinShuffle(mx)
+
+	out := append(cname, rest...)
+	out = append(out, address...)
+	out = append(out, mx...)
+	return out
+}
+
+func roundRobinShuffle(records []dns.RR) {
+	switch l := len(records); l {
+	case 0, 1:
+		break
+	case 2:
+		if dns.Id()%2 == 0 {
+			records[0], records[1] = records[1], records[0]
+		}
+	default:
+		for j := 0; j < l*(int(dns.Id())%4+1); j++ {
+			q := int(dns.Id()) % l
+			p := int(dns.Id()) % l
+			if q == p {
+				p = (p + 1) % l
+			}
+			records[q], records[p] = records[p], records[q]
+		}
+	}
 }
 
 func (dlz *Dlzmysql) connect() (*sql.DB, error) {
