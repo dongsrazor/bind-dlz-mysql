@@ -299,6 +299,8 @@ func (dlz *Dlzmysql) SOA(name string, records []string) (answers, extras []dns.R
 	return
 }
 
+//从fqdn名称(以.结尾)分割host/zone
+//mysql存储的zone不以.结尾
 func getHostZone(domain string) (host, zone string) {
 	name := strings.TrimRight(domain, ".")
 	vals := strings.Split(name, ".")
@@ -308,6 +310,7 @@ func getHostZone(domain string) (host, zone string) {
 	return
 }
 
+//轮询返回RR记录for A/AAAA/NS/MX
 func roundRobin(in []dns.RR) []dns.RR {
 	cname := []dns.RR{}
 	address := []dns.RR{}

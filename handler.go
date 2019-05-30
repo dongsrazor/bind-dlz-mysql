@@ -30,7 +30,15 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 	view := queryIP(dlz.IPtable, ip)
 	
 	answers := []dns.RR{}
+	authorities := []dns.RR{}
 	extras := []dns.RR{}
+
+	//获取NS记录
+	_, zone := getHostZone(domain)
+	zone += "."
+	rs := dlz.getNS(zone, "NS", view)
+	authorities, extras = dlz.NS(zone, rs)
+
 
 	switch qtype {
 	case "A":
@@ -56,6 +64,7 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 				break
 			}
 		}
+
 	case "CNAME":
 		records := dlz.get(domain, qtype, view)
 		answers, extras = dlz.CNAME(domain, records)
@@ -68,11 +77,12 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 	case "SOA":
 		records := dlz.getSOA(domain, qtype, view)
 		answers, extras = dlz.SOA(domain, records)						
-	//default:
-	//	return answers, extras
+	default:
+		break
 	}
 	
 	a.Answer = append(a.Answer, answers...)
+	a.Ns = append(a.Ns, authorities...)
 	a.Extra = append(a.Extra, extras...)
 
 	w.WriteMsg(a)
