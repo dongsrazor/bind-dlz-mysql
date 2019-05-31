@@ -5,7 +5,7 @@ package dlzmysql
 import (
 	"context"
 	"strings"
-	"fmt"
+	//"fmt"
 
 	"github.com/coredns/coredns/request"
 
@@ -16,10 +16,10 @@ import (
 func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	state := request.Request{W: w, Req: r}
 
-	qname := state.Name()
+	//qname := state.Name()
 	qtype := state.Type()
 	domain := state.QName()
-	fmt.Println(domain, qname, qtype)
+	//fmt.Println(domain, qname, qtype)
 	
 	a := new(dns.Msg)
 	a.SetReply(r)
@@ -33,15 +33,13 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 	authorities := []dns.RR{}
 	extras := []dns.RR{}
 
-	//获取NS记录
-	_, zone := getHostZone(domain)
-	zone += "."
-	rs := dlz.getNS(zone, "NS", view)
-	authorities, extras = dlz.NS(zone, rs)
-
-
 	switch qtype {
 	case "A":
+		//获取NS记录
+		//_, zone := getHostZone(domain)
+		//zone += "."
+		//rs := dlz.getNS(zone, "NS", view)
+		//authorities, extras = dlz.NS(zone, rs)
 		//A->CNAME 直至找到最终解析
 		for {
 			rs := dlz.get(domain, "A", view)
@@ -64,7 +62,6 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 				break
 			}
 		}
-
 	case "CNAME":
 		records := dlz.get(domain, qtype, view)
 		answers, extras = dlz.CNAME(domain, records)
