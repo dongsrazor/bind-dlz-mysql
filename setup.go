@@ -22,10 +22,12 @@ func setup(c *caddy.Controller) error {
 
 	db, _ := r.connect()
 	iptable := loadIPtable()
+	cache, _ := r.getCache()
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
 		r.Next = next
 		r.DB = db
+		r.Cache = cache
 		r.IPtable = iptable
 		return r
 	})

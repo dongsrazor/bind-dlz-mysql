@@ -17,6 +17,7 @@ import (
 	//"github.com/coredns/coredns/request"
 
 	"github.com/miekg/dns"
+	"github.com/coocood/freecache"
 )
 
 //Dlzmysql 定义
@@ -27,50 +28,72 @@ type Dlzmysql struct {
 	mysqlUser		string
 	mysqlPassword	string
 	mysqlDB			string
+	Cache			*freecache.Cache
 	IPtable 		[]IPrange
 }
 
 //从mysql中查询A/AAAA/CNAME记录
-func (dlz Dlzmysql) get(domain string, queryType string, view string) (records []string) {
+func (dlz Dlzmysql) get(domain string, queryType string, view string) ([]string) {
 	host, zone := getHostZone(domain)
-	sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
-	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
-	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
-	rows, err := dlz.DB.Query(sql)
-
-	for rows.Next() {
-		var host string
-		var zone string
-		var view string
-		var queryType string
-		var data string
-		var ttl string
-		err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
-		if err != nil {
-			fmt.Println(err)
+	records := []string{}
+	key := []byte(strings.Join([]string{domain, queryType, view}, "-"))
+	got, err := dlz.Cache.Get(key)
+	if err != nil {
+		//fmt.Println("Cache: get key: 异常", string(key), err)
+		sql := "SELECT `data`, `ttl` FROM `dns_record` " +
+		"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
+		"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
+		//fmt.Println("mysql: 查询", sql)
+		rows, err := dlz.DB.Query(sql)
+		for rows.Next() {
+			var data string
+			var ttl string
+			err = rows.Scan(&data, &ttl)
+			if err != nil {
+				fmt.Println(err)
+			}
+			r := strings.Join([]string{domain, queryType, data, ttl}, ":")
+			records = append(records, r)
 		}
-		r := strings.Join([]string{domain, queryType, data, ttl}, ":")
-		records = append(records, r)
+		if len(records) > 0 {
+			//fmt.Println("mysql: 返回", records)
+			val := []byte(strings.Join(records, ","))
+			dlz.Cache.Set(key, val, 600)			
+			//fmt.Println("Cache: set", string(key), string(val))
+			//fmt.Println("return records from mysql", records)
+			return records
+		} else {
+			dlz.Cache.Set(key, []byte{}, 600)
+		}		
+	} else {
+		//fmt.Println("get key 正常", string(key), string(got))
+		if len(got) > 0 {
+			vals := strings.Split(string(got), ",")
+			for _, v := range vals {
+				records = append(records, v)
+			}
+			//fmt.Println("return records from cache", records)
+			return records
+		} else {
+			return []string{}
+		}
 	}
-	return
+	//fmt.Println("return records null")
+	return []string{}
 }
 
 //从mysql中查询NS记录
 func (dlz Dlzmysql) getNS(domain string, queryType string, view string) (records []string) {
 	_, zone := getHostZone(domain)
 	host := "@"
-	sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl` FROM `dns_record` " +
+	sql := "SELECT `data`, `ttl` FROM `dns_record` " +
 	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
 	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
 	rows, err := dlz.DB.Query(sql)
 	for rows.Next() {
-		var host string
-		var zone string
-		var view string
-		var queryType string
 		var data string
 		var ttl string
-		err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl)
+		err = rows.Scan(&data, &ttl)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -84,19 +107,15 @@ func (dlz Dlzmysql) getNS(domain string, queryType string, view string) (records
 func (dlz Dlzmysql) getMX(domain string, queryType string, view string) (records []string) {
 	_, zone := getHostZone(domain)
 	host := "@"
-	sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `mx_priority`, `ttl` FROM `dns_record` " +
+	sql := "SELECT `data`, `mx_priority`, `ttl` FROM `dns_record` " +
 	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
 	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
 	rows, err := dlz.DB.Query(sql)
 	for rows.Next() {
-		var host string
-		var zone string
-		var view string
-		var queryType string
 		var data string
 		var mxPriority string
 		var ttl string
-		err = rows.Scan(&host, &zone, &view, &queryType, &data, &mxPriority, &ttl)
+		err = rows.Scan(&data, &mxPriority, &ttl)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -110,15 +129,11 @@ func (dlz Dlzmysql) getMX(domain string, queryType string, view string) (records
 func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) (records []string) {
 	_, zone := getHostZone(domain)
 	host := "@"
-	sql := "SELECT `host`, `zone`, `view`, `type`, `data`, `ttl`, `resp_person`, `serial`, `refresh`, `retry`, `expire`, `minimum` FROM `dns_record` " +
+	sql := "SELECT `data`, `ttl`, `resp_person`, `serial`, `refresh`, `retry`, `expire`, `minimum` FROM `dns_record` " +
 	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
 	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
 	rows, err := dlz.DB.Query(sql)
 	for rows.Next() {
-		var host string
-		var zone string
-		var view string
-		var queryType string
 		var data string
 		var ttl string
 		var respPersion string
@@ -127,7 +142,7 @@ func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) (record
 		var retry string
 		var expire string
 		var minimum string
-        err = rows.Scan(&host, &zone, &view, &queryType, &data, &ttl, &respPersion, &serial, &refresh, &retry, &expire, &minimum)
+        err = rows.Scan(&data, &ttl, &respPersion, &serial, &refresh, &retry, &expire, &minimum)
         if err != nil {
             fmt.Println(err)
 		}
@@ -361,9 +376,15 @@ func roundRobinShuffle(records []dns.RR) {
 func (dlz *Dlzmysql) connect() (*sql.DB, error) {
 	dsn := dlz.mysqlUser + ":" + dlz.mysqlPassword + "@tcp(" + dlz.mysqlAddress + ")/" + dlz.mysqlDB + "?timeout=1s&readTimeout=1s"
 	//dsn := "wanghd:smart@tcp(192.168.16.99:3306)/bind9?timeout=1s&readTimeout=1s"
-	fmt.Println(dsn)
+	//fmt.Println(dsn)
 	db, err := sql.Open("mysql", dsn)
-	db.SetMaxOpenConns(2048)
-	db.SetMaxIdleConns(1024)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
 	return db, err
+}
+
+func (dlz *Dlzmysql) getCache()(*freecache.Cache, error) {
+	cacheSize := 100 * 1024 * 1024
+	cache := freecache.NewCache(cacheSize)
+	return cache, nil
 }
