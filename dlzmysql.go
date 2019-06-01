@@ -11,6 +11,7 @@ import (
 	//"os"
 
 	"database/sql"
+	//adfa
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/coredns/coredns/plugin"
@@ -74,8 +75,6 @@ func (dlz Dlzmysql) get(domain string, queryType string, view string) ([]string)
 			}
 			//fmt.Println("return records from cache", records)
 			return records
-		} else {
-			return []string{}
 		}
 	}
 	//fmt.Println("return records null")
@@ -83,73 +82,133 @@ func (dlz Dlzmysql) get(domain string, queryType string, view string) ([]string)
 }
 
 //从mysql中查询NS记录
-func (dlz Dlzmysql) getNS(domain string, queryType string, view string) (records []string) {
-	_, zone := getHostZone(domain)
+func (dlz Dlzmysql) getNS(domain string, queryType string, view string) ([]string) {
 	host := "@"
-	sql := "SELECT `data`, `ttl` FROM `dns_record` " +
-	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
-	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
-	rows, err := dlz.DB.Query(sql)
-	for rows.Next() {
-		var data string
-		var ttl string
-		err = rows.Scan(&data, &ttl)
-		if err != nil {
-			fmt.Println(err)
+	_, zone := getHostZone(domain)
+	records := []string{}
+	key := []byte(strings.Join([]string{domain, queryType, view}, "-"))
+	got, err := dlz.Cache.Get(key)
+	if err != nil {
+		sql := "SELECT `data`, `ttl` FROM `dns_record` " +
+			"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
+			"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
+		rows, err := dlz.DB.Query(sql)
+		for rows.Next() {
+			var data string
+			var ttl string
+			err = rows.Scan(&data, &ttl)
+			if err != nil {
+				fmt.Println(err)
+			}
+			r := strings.Join([]string{domain, queryType, data, ttl}, ":")
+			records = append(records, r)
 		}
-		r := strings.Join([]string{domain, queryType, data, ttl}, ":")
-		records = append(records, r)
+		if len(records) > 0 {
+			val := []byte(strings.Join(records, ","))
+			dlz.Cache.Set(key, val, 600)			
+			return records
+		} else {
+			dlz.Cache.Set(key, []byte{}, 600)
+		}
+	} else {
+		if len(got) > 0 {
+			vals := strings.Split(string(got), ",")
+			for _, v := range vals {
+				records = append(records, v)
+			}
+			return records
+		}
 	}
-	return	
+	return	[]string{}
 }
 
 //从mysql中查询MX记录
-func (dlz Dlzmysql) getMX(domain string, queryType string, view string) (records []string) {
-	_, zone := getHostZone(domain)
+func (dlz Dlzmysql) getMX(domain string, queryType string, view string) ([]string) {
 	host := "@"
-	sql := "SELECT `data`, `mx_priority`, `ttl` FROM `dns_record` " +
-	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
-	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
-	rows, err := dlz.DB.Query(sql)
-	for rows.Next() {
-		var data string
-		var mxPriority string
-		var ttl string
-		err = rows.Scan(&data, &mxPriority, &ttl)
-		if err != nil {
-			fmt.Println(err)
+	_, zone := getHostZone(domain)
+	records := []string{}
+	key := []byte(strings.Join([]string{domain, queryType, view}, "-"))
+	got, err := dlz.Cache.Get(key)
+	if err != nil {
+		sql := "SELECT `data`, `mx_priority`, `ttl` FROM `dns_record` " +
+			"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
+			"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
+		rows, err := dlz.DB.Query(sql)
+		for rows.Next() {
+			var data string
+			var mxPriority string
+			var ttl string
+			err = rows.Scan(&data, &mxPriority, &ttl)
+			if err != nil {
+				fmt.Println(err)
+			}
+			r := strings.Join([]string{domain, queryType, data, mxPriority, ttl}, ":")
+			records = append(records, r)
 		}
-		r := strings.Join([]string{domain, queryType, data, mxPriority, ttl}, ":")
-		records = append(records, r)
+		if len(records) > 0 {
+			val := []byte(strings.Join(records, ","))
+			dlz.Cache.Set(key, val, 600)			
+			return records
+		} else {
+			dlz.Cache.Set(key, []byte{}, 600)
+		}
+	} else {
+		if len(got) > 0 {
+			vals := strings.Split(string(got), ",")
+			for _, v := range vals {
+				records = append(records, v)
+			}
+			return records
+		}
 	}
-	return	
+	return []string{}
 }
 
 //从mysql中查询SOA记录
-func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) (records []string) {
-	_, zone := getHostZone(domain)
+func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) ([]string) {
 	host := "@"
-	sql := "SELECT `data`, `ttl`, `resp_person`, `serial`, `refresh`, `retry`, `expire`, `minimum` FROM `dns_record` " +
-	"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
-	"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
-	rows, err := dlz.DB.Query(sql)
-	for rows.Next() {
-		var data string
-		var ttl string
-		var respPersion string
-		var serial string
-		var refresh string
-		var retry string
-		var expire string
-		var minimum string
-        err = rows.Scan(&data, &ttl, &respPersion, &serial, &refresh, &retry, &expire, &minimum)
-        if err != nil {
-            fmt.Println(err)
+	_, zone := getHostZone(domain)
+	records := []string{}
+	key := []byte(strings.Join([]string{domain, queryType, view}, "-"))
+	got, err := dlz.Cache.Get(key)
+	if err != nil {
+		sql := "SELECT `data`, `ttl`, `resp_person`, `serial`, `refresh`, `retry`, `expire`, `minimum` FROM `dns_record` " +
+			"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
+			"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
+		rows, err := dlz.DB.Query(sql)
+		for rows.Next() {
+			var data string
+			var ttl string
+			var respPersion string
+			var serial string
+			var refresh string
+			var retry string
+			var expire string
+			var minimum string
+			err = rows.Scan(&data, &ttl, &respPersion, &serial, &refresh, &retry, &expire, &minimum)
+			if err != nil {
+				fmt.Println(err)
+			}
+			r := strings.Join([]string{domain, queryType, data, respPersion, ttl, serial, refresh, retry, expire, minimum}, ":")
+			records = append(records, r)
 		}
-		r := strings.Join([]string{domain, queryType, data, respPersion, ttl, serial, refresh, retry, expire, minimum}, ":")
-		records = append(records, r)
-    }
-	return	
+		if len(records) > 0 {
+			val := []byte(strings.Join(records, ","))
+			dlz.Cache.Set(key, val, 600)			
+			return records
+		} else {
+			dlz.Cache.Set(key, []byte{}, 600)
+		}
+	} else {
+		if len(got) > 0 {
+			vals := strings.Split(string(got), ",")
+			for _, v := range vals {
+				records = append(records, v)
+			}
+			return records
+		}
+	}
+	return []string{}
 }
 
 //A 记录
