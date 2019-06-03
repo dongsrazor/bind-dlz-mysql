@@ -30,15 +30,15 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 	//获取bind-dlz-mysql定义的用户view
 	queryView := queryIP(dlz.IPtable, ip)
 
-	//获取NS记录
-	_, zone := getHostZone(domain)
-	zone += "."
-	rs := dlz.getNS(zone, "NS", queryView)
-	ans, _ := dlz.NS(zone, rs)
-	authorities = roundRobin(ans)	//轮询返回NS记录
-
 	switch queryType {
 	case "A":
+		//获取NS记录
+		_, zone := getHostZone(domain)
+		zone += "."
+		rs := dlz.getNS(zone, "NS", queryView)
+		ans, _ := dlz.NS(zone, rs)
+		authorities = roundRobin(ans)	//轮询返回NS记录
+
 		//A->CNAME...->A 直至找到最终解析A记录
 		for {
 			rs := dlz.get(domain, "A", queryView)
@@ -62,6 +62,13 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 			}
 		}
 	case "AAAA":
+		//获取NS记录
+		_, zone := getHostZone(domain)
+		zone += "."
+		rs := dlz.getNS(zone, "NS", queryView)
+		ans, _ := dlz.NS(zone, rs)
+		authorities = roundRobin(ans)	//轮询返回NS记录
+
 		//AAAA->CNAME...->AAAA直至找到最终解析AAAA记录
 		for {
 			rs := dlz.get(domain, "AAAA", queryView)
@@ -85,6 +92,12 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 			}
 		}		
 	case "CNAME":
+		//获取NS记录
+		_, zone := getHostZone(domain)
+		zone += "."
+		rs := dlz.getNS(zone, "NS", queryView)
+		ans, _ := dlz.NS(zone, rs)
+		authorities = roundRobin(ans)	//轮询返回NS记录
 		records := dlz.get(domain, queryType, queryView)
 		answers, extras = dlz.CNAME(domain, records)
 	case "NS":
@@ -108,6 +121,27 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 
 	//打印日志
 	if dlz.querylog {
+		// {type}: qtype of the request
+		// {name}: qname of the request
+		// {class}: qclass of the request
+		// {proto}: protocol used (tcp or udp)
+		// {remote}: client’s IP address, for IPv6 addresses these are enclosed in brackets: [::1]
+		// {local}: server’s IP address, for IPv6 addresses these are enclosed in brackets: [::1]
+		// {size}: request size in bytes
+		// {port}: client’s port
+		// {duration}: response duration
+		// {rcode}: response RCODE
+		// {rsize}: raw (uncompressed), response size (a client may receive a smaller response)
+		// {>rflags}: response flags, each set flag will be displayed, e.g. “aa, tc”. This includes the qr bit as well
+		// {>bufsize}: the EDNS0 buffer size advertised in the query
+		// {>do}: is the EDNS0 DO (DNSSEC OK) bit set in the query
+		// {>id}: query ID
+		// {>opcode}: query OPCODE
+		// {common}: the default Common Log Format.
+		// {combined}: the Common Log Format with the query opcode.
+		// {/LABEL}: any metadata label is accepted as a place holder if it is enclosed between {/ and }, the place holder will be replaced by the corresponding metadata value or the default value - if label is not defined. See the metadata plugin for more information.
+		// The default Common Log Format is:
+		// `{remote}:{port} - {>id} "{type} {class} {name} {proto} {size} {>do} {>bufsize}" {rcode} {>rflags} {rsize} {duration}`
 		port := state.Port()
 		queryClient := strings.Join([]string{ip, port}, ":")
 		queryID := strconv.FormatUint(uint64(a.Id), 10)

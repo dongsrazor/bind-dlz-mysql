@@ -52,6 +52,11 @@ func (dlz Dlzmysql) get(domain string, queryType string, view string) ([]string)
 		"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
 		//fmt.Println("mysql: 查询", sql)
 		rows, err := dlz.DB.Query(sql)
+		if err != nil {
+			log.Error("func get" + queryType + "() error: ", err)
+			//数据库查询失败直接return空记录，不缓存空记录
+			return []string{}
+		}
 		for rows.Next() {
 			var data string
 			var ttl string
@@ -70,7 +75,9 @@ func (dlz Dlzmysql) get(domain string, queryType string, view string) ([]string)
 			//fmt.Println("return records from mysql", records)
 			return records
 		} else {
+			//数据库返回空，则缓存空记录
 			dlz.Cache.Set(key, []byte{}, dlz.expireSeconds)
+			//fmt.Println("Cache: set", string(key), "null")
 		}		
 	} else {
 		//fmt.Println("get key 正常", string(key), string(got))
@@ -99,6 +106,10 @@ func (dlz Dlzmysql) getNS(domain string, queryType string, view string) ([]strin
 			"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
 			"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
 		rows, err := dlz.DB.Query(sql)
+		if err != nil {
+			log.Error("func getNS() error: ", err)
+			return []string{}
+		}
 		for rows.Next() {
 			var data string
 			var ttl string
@@ -140,6 +151,10 @@ func (dlz Dlzmysql) getMX(domain string, queryType string, view string) ([]strin
 			"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
 			"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
 		rows, err := dlz.DB.Query(sql)
+		if err != nil {
+			log.Error("func getMX() error: ", err)
+			return []string{}
+		}
 		for rows.Next() {
 			var data string
 			var mxPriority string
@@ -182,6 +197,10 @@ func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) ([]stri
 			"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
 			"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
 		rows, err := dlz.DB.Query(sql)
+		if err != nil {
+			log.Error("func getSOA error: ", err)
+			return []string{}
+		}
 		for rows.Next() {
 			var data string
 			var ttl string
@@ -391,10 +410,11 @@ func getHostZone(domain string) (host, zone string) {
 }
 
 //轮询返回RR记录for A/AAAA/NS/MX
-func roundRobin(in []dns.RR) []dns.RR {
+func roundRobin(in []dns.RR) (out []dns.RR) {
 	cname := []dns.RR{}
 	address := []dns.RR{}
 	mx := []dns.RR{}
+	ns := []dns.RR{}
 	rest := []dns.RR{}
 	for _, r := range in {
 		switch r.Header().Rrtype {
@@ -404,6 +424,8 @@ func roundRobin(in []dns.RR) []dns.RR {
 			address = append(address, r)
 		case dns.TypeMX:
 			mx = append(mx, r)
+		case dns.TypeNS:
+			ns = append(ns, r)
 		default:
 			rest = append(rest, r)
 		}
@@ -411,11 +433,12 @@ func roundRobin(in []dns.RR) []dns.RR {
 
 	roundRobinShuffle(address)
 	roundRobinShuffle(mx)
+	roundRobinShuffle(ns)
 
-	out := append(cname, rest...)
+	out = append(cname, ns...)
 	out = append(out, address...)
 	out = append(out, mx...)
-	return out
+	return
 }
 
 func roundRobinShuffle(records []dns.RR) {
@@ -441,8 +464,10 @@ func roundRobinShuffle(records []dns.RR) {
 func (dlz *Dlzmysql) connect() (*sql.DB, error) {
 	dsn := dlz.mysqlUser + ":" + dlz.mysqlPassword + "@tcp(" + dlz.mysqlAddress + ")/" + dlz.mysqlDB + "?timeout=1s&readTimeout=1s"
 	db, err := sql.Open("mysql", dsn)
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(10)
+	if err != err {
+		db.SetMaxOpenConns(10)
+		db.SetMaxIdleConns(10)		
+	}
 	return db, err
 }
 

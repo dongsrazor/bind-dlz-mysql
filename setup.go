@@ -21,15 +21,15 @@ func setup(c *caddy.Controller) error {
 		return plugin.Error("dlzmysql", err)
 	}
 
+	iptable := loadIPtable()
+	log.Info("IPtable loaded.")
+
 	db, err := r.connect()
 	if err != nil {
 		log.Info("Mysql Connected. Error:", err)
 	} else {
 		log.Info("Mysql Connected.")
 	}
-	
-	iptable := loadIPtable()
-	log.Info("IPtable loaded.")
 	
 	cache := r.getCache()
 	log.Info("Cache Created: cachesize/expire: ", r.cacheSize, r.expireSeconds)
