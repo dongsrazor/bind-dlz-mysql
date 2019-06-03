@@ -4,6 +4,7 @@ import (
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
 	"github.com/mholt/caddy"
+	"strconv"
 )
 
 func init() {
@@ -20,9 +21,18 @@ func setup(c *caddy.Controller) error {
 		return plugin.Error("dlzmysql", err)
 	}
 
-	db, _ := r.connect()
+	db, err := r.connect()
+	if err != nil {
+		log.Info("Mysql Connected. Error:", err)
+	} else {
+		log.Info("Mysql Connected.")
+	}
+	
 	iptable := loadIPtable()
-	cache, _ := r.getCache()
+	log.Info("IPtable loaded.")
+	
+	cache := r.getCache()
+	log.Info("Cache Created: cachesize/expire: ", r.cacheSize, r.expireSeconds)
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
 		r.Next = next
@@ -36,7 +46,10 @@ func setup(c *caddy.Controller) error {
 }
 
 func dlzmysqlParse(c *caddy.Controller) (*Dlzmysql, error) {
-	dlzmysql := Dlzmysql {}
+	dlzmysql := Dlzmysql{}
+	var (
+		err            error
+	)
 	for c.Next() {
 		if c.NextBlock() {
 			for {
@@ -61,6 +74,22 @@ func dlzmysqlParse(c *caddy.Controller) (*Dlzmysql, error) {
 						return &Dlzmysql{}, c.ArgErr()
 					}
 					dlzmysql.mysqlDB = c.Val()
+				case "cachesize":
+					if !c.NextArg() {
+						return &Dlzmysql{}, c.ArgErr()
+					}
+					dlzmysql.cacheSize, err = strconv.Atoi(c.Val())
+					if err != nil {
+						dlzmysql.cacheSize = 100*1024*1024;
+					}
+				case "expire":
+					if !c.NextArg() {
+						return &Dlzmysql{}, c.ArgErr()
+					}
+					dlzmysql.expireSeconds, err = strconv.Atoi(c.Val())
+					if err != nil {
+						dlzmysql.expireSeconds = 300;
+					}					
 				default:
 					if c.Val() != "}" {
 						return &Dlzmysql{}, c.Errf("unknown property '%s'", c.Val())

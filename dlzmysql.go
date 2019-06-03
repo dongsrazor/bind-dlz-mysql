@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	//adfa
 	_ "github.com/go-sql-driver/mysql"
+	clog "github.com/coredns/coredns/plugin/pkg/log"
 
 	"github.com/coredns/coredns/plugin"
 	//"github.com/coredns/coredns/request"
@@ -21,16 +22,20 @@ import (
 	"github.com/coocood/freecache"
 )
 
+var log = clog.NewWithPlugin("dlzmysql")
+
 //Dlzmysql 定义
 type Dlzmysql struct {
-	Next    		plugin.Handler
-	DB				*sql.DB
-	mysqlAddress	string
-	mysqlUser		string
-	mysqlPassword	string
-	mysqlDB			string
-	Cache			*freecache.Cache
-	IPtable 		[]IPrange
+	Next          plugin.Handler
+	DB            *sql.DB
+	mysqlAddress  string
+	mysqlUser     string
+	mysqlPassword string
+	mysqlDB       string
+	Cache         *freecache.Cache
+	cacheSize     int
+	expireSeconds int		
+	IPtable       []IPrange
 }
 
 //从mysql中查询A/AAAA/CNAME记录
@@ -59,12 +64,12 @@ func (dlz Dlzmysql) get(domain string, queryType string, view string) ([]string)
 		if len(records) > 0 {
 			//fmt.Println("mysql: 返回", records)
 			val := []byte(strings.Join(records, ","))
-			dlz.Cache.Set(key, val, 600)			
+			dlz.Cache.Set(key, val, dlz.expireSeconds)			
 			//fmt.Println("Cache: set", string(key), string(val))
 			//fmt.Println("return records from mysql", records)
 			return records
 		} else {
-			dlz.Cache.Set(key, []byte{}, 600)
+			dlz.Cache.Set(key, []byte{}, dlz.expireSeconds)
 		}		
 	} else {
 		//fmt.Println("get key 正常", string(key), string(got))
@@ -434,16 +439,14 @@ func roundRobinShuffle(records []dns.RR) {
 
 func (dlz *Dlzmysql) connect() (*sql.DB, error) {
 	dsn := dlz.mysqlUser + ":" + dlz.mysqlPassword + "@tcp(" + dlz.mysqlAddress + ")/" + dlz.mysqlDB + "?timeout=1s&readTimeout=1s"
-	//dsn := "wanghd:smart@tcp(192.168.16.99:3306)/bind9?timeout=1s&readTimeout=1s"
-	//fmt.Println(dsn)
 	db, err := sql.Open("mysql", dsn)
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(10)
 	return db, err
 }
 
-func (dlz *Dlzmysql) getCache()(*freecache.Cache, error) {
-	cacheSize := 100 * 1024 * 1024
+func (dlz *Dlzmysql) getCache()(*freecache.Cache) {
+	cacheSize := dlz.cacheSize
 	cache := freecache.NewCache(cacheSize)
-	return cache, nil
+	return cache
 }
