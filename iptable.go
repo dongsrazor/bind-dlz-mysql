@@ -2,7 +2,6 @@ package dlzmysql
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"net"
 	"os"
@@ -35,11 +34,10 @@ func ipTouint32(ipnr net.IP) uint32 {
 }
 
 func loadIPtable() (iptable []IPrange) {
-	inputFile, inputError := os.Open("funshion.view.dat")
+	inputFile, inputError := os.Open("dlzmysql.iptable.dat")
 	if inputError != nil {
-		fmt.Printf("funshion.view.dat not found\n")
+		log.Error(inputError)
 		os.Exit(1)
-
 	}
 	defer inputFile.Close()
 
@@ -75,7 +73,6 @@ func queryIP(iptable []IPrange, ip string) (view string) {
 		endint := iptable[mid].endint
 		if ipint < startint {
 			hid = mid - 1
-
 		} else if ipint > endint {
 			lid = mid + 1
 		} else {
