@@ -5,8 +5,8 @@ package dlzmysql
 import (
 	"context"
 	"strings"
-	//"fmt"
-
+	"time"
+	"strconv"
 	"github.com/coredns/coredns/request"
 
 	"github.com/miekg/dns"
@@ -14,38 +14,36 @@ import (
 
 // ServeDNS implements the plugin.Handler interface.
 func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
+	start := time.Now()	
 	state := request.Request{W: w, Req: r}
-
-	//qname := state.Name()
-	qtype := state.Type()
+	queryType := state.Type()
 	domain := state.QName()
-	//fmt.Println(domain, qname, qtype)
-	
+	ip := state.IP()
+
 	a := new(dns.Msg)
 	a.SetReply(r)
-	a.Authoritative = true
-	//a.Authoritative, a.RecursionAvailable, a.Compress = true, false, true
-
-	ip := state.IP()
-	view := queryIP(dlz.IPtable, ip)
-	
+	a.Authoritative, a.RecursionAvailable, a.Compress = true, false, false
 	answers := []dns.RR{}
 	authorities := []dns.RR{}
 	extras := []dns.RR{}
 
+	//获取bind-dlz-mysql定义的用户view
+	queryView := queryIP(dlz.IPtable, ip)
+
 	//获取NS记录
 	_, zone := getHostZone(domain)
 	zone += "."
-	rs := dlz.getNS(zone, "NS", view)
-	authorities, extras = dlz.NS(zone, rs)
+	rs := dlz.getNS(zone, "NS", queryView)
+	ans, _ := dlz.NS(zone, rs)
+	authorities = roundRobin(ans)	//轮询返回NS记录
 
-	switch qtype {
+	switch queryType {
 	case "A":
-		//A->CNAME 直至找到最终解析
+		//A->CNAME...->A 直至找到最终解析A记录
 		for {
-			rs := dlz.get(domain, "A", view)
+			rs := dlz.get(domain, "A", queryView)
 			if len(rs) == 0 {
-				rs := dlz.get(domain, "CNAME", view)
+				rs := dlz.get(domain, "CNAME", queryView)
 				if len(rs) == 0 {
 					break
 				} else if len(rs) == 1 {
@@ -64,11 +62,11 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 			}
 		}
 	case "AAAA":
-		//AAAA->CNAME 直至找到最终解析
+		//AAAA->CNAME...->AAAA直至找到最终解析AAAA记录
 		for {
-			rs := dlz.get(domain, "AAAA", view)
+			rs := dlz.get(domain, "AAAA", queryView)
 			if len(rs) == 0 {
-				rs := dlz.get(domain, "CNAME", view)
+				rs := dlz.get(domain, "CNAME", queryView)
 				if len(rs) == 0 {
 					break
 				} else if len(rs) == 1 {
@@ -85,18 +83,19 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 				answers = append(answers, roundRobinAnswers...)
 				break
 			}
-		}
+		}		
 	case "CNAME":
-		records := dlz.get(domain, qtype, view)
+		records := dlz.get(domain, queryType, queryView)
 		answers, extras = dlz.CNAME(domain, records)
 	case "NS":
-		records := dlz.getNS(domain, qtype, view)
-		answers, extras = dlz.NS(domain, records)
+		records := dlz.getNS(domain, queryType, queryView)
+		ans, _ := dlz.NS(domain, records)
+		answers = roundRobin(ans)	//轮询返回NS记录
 	case "MX":
-		records := dlz.getMX(domain, qtype, view)
+		records := dlz.getMX(domain, queryType, queryView)
 		answers, extras = dlz.MX(domain, records)
 	case "SOA":
-		records := dlz.getSOA(domain, qtype, view)
+		records := dlz.getSOA(domain, queryType, queryView)
 		answers, extras = dlz.SOA(domain, records)						
 	default:
 		break
@@ -105,9 +104,56 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 	a.Answer = append(a.Answer, answers...)
 	a.Ns = append(a.Ns, authorities...)
 	a.Extra = append(a.Extra, extras...)
-
 	w.WriteMsg(a)
 
+	//打印日志
+	if dlz.querylog {
+		port := state.Port()
+		queryClient := strings.Join([]string{ip, port}, ":")
+		queryID := strconv.FormatUint(uint64(a.Id), 10)
+		queryType := state.Type()
+		queryClass := state.Class()
+		queryName := state.Name()
+		queryProto := state.Proto()
+		querySize := strconv.Itoa(state.Len())
+		queryDO := strconv.FormatBool(state.Do())
+		queryBufsize := strconv.Itoa(state.Size())
+		respRcode := dns.RcodeToString[a.Rcode]
+		respRflags := ""
+		if a.Response {
+			respRflags += "qr,"
+		}
+		if a.Authoritative {
+			respRflags += "aa,"
+		}
+		if a.Truncated {
+			respRflags += "tc,"
+		}
+		if a.RecursionDesired {
+			respRflags += "rd,"
+		}
+		if a.RecursionAvailable {
+			respRflags += "ra,"
+		}
+		if a.Zero {
+			respRflags += "z,"
+		}
+		if a.AuthenticatedData {
+			respRflags += "ad,"
+		}
+		if a.CheckingDisabled {
+			respRflags += "cd,"
+		}
+		respRflags = strings.TrimRight(respRflags, ",")
+		respRsize := strconv.Itoa(a.Len())
+		respDuration := strconv.FormatFloat(time.Since(start).Seconds(), 'f', -1, 64) + "s"
+		
+		msg := strings.Join([]string{queryClient, queryView, queryID, queryType, queryClass, queryName,
+			queryProto, querySize, queryDO, queryBufsize,
+			respRcode, respRflags, respRsize, respDuration}, " ")
+		log.Info(msg)
+	}
+	
 	return 0, nil
 }
 

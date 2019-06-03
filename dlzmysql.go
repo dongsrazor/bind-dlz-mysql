@@ -36,6 +36,7 @@ type Dlzmysql struct {
 	cacheSize     int
 	expireSeconds int		
 	IPtable       []IPrange
+	querylog      bool
 }
 
 //从mysql中查询A/AAAA/CNAME记录

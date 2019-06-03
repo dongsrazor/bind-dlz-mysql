@@ -90,6 +90,15 @@ func dlzmysqlParse(c *caddy.Controller) (*Dlzmysql, error) {
 					if err != nil {
 						dlzmysql.expireSeconds = 300;
 					}					
+				case "querylog":
+					if !c.NextArg() {
+						return &Dlzmysql{}, c.ArgErr()
+					}
+					if c.Val() == "true" {
+						dlzmysql.querylog = true
+					} else {
+						dlzmysql.querylog = false
+					}
 				default:
 					if c.Val() != "}" {
 						return &Dlzmysql{}, c.Errf("unknown property '%s'", c.Val())
