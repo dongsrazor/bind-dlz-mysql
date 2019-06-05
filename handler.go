@@ -32,13 +32,7 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 
 	switch queryType {
 	case "A":
-		//获取NS记录
-		_, zone := getHostZone(domain)
-		zone += "."
-		rs := dlz.getNS(zone, "NS", queryView)
-		ans, _ := dlz.NS(zone, rs)
-		authorities = roundRobin(ans)	//轮询返回NS记录
-
+		chain := []string{}
 		//A->CNAME...->A 直至找到最终解析A记录
 		for {
 			rs := dlz.get(domain, "A", queryView)
@@ -51,6 +45,7 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 					answers = append(answers, ans...)
 					values := strings.Split(rs[0], ":")
 					domain = values[2]
+					chain = append(chain, domain)
 				} else {
 					break
 				}
@@ -58,8 +53,19 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 				ans, _ := dlz.A(domain, rs)
 				roundRobinAnswers := roundRobin(ans)	//轮询返回A记录
 				answers = append(answers, roundRobinAnswers...)
+				chain = append(chain, domain)
 				break
 			}
+		}
+		//多层CNAME：返回最后一个CNAME的权威NS记录
+		number := len(chain)
+		if number > 0 {
+			//获取NS记录
+			_, zone := getHostZone(chain[number-1])
+			zone += "."
+			rs := dlz.getNS(zone, "NS", queryView)
+			ans, _ := dlz.NS(zone, rs)
+			authorities = roundRobin(ans)	//轮询返回NS记录
 		}
 	case "AAAA":
 		//获取NS记录
