@@ -111,9 +111,23 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 		ans, _ := dlz.NS(domain, records)
 		answers = roundRobin(ans)	//轮询返回NS记录
 	case "MX":
+		//获取NS记录
+		_, zone := getHostZone(domain)
+		zone += "."
+		rs := dlz.getNS(zone, "NS", queryView)
+		ans, _ := dlz.NS(zone, rs)
+		authorities = roundRobin(ans)	//轮询返回NS记录
+		//MX
 		records := dlz.getMX(domain, queryType, queryView)
 		answers, extras = dlz.MX(domain, records)
 	case "SOA":
+		//获取NS记录
+		_, zone := getHostZone(domain)
+		zone += "."
+		rs := dlz.getNS(zone, "NS", queryView)
+		ans, _ := dlz.NS(zone, rs)
+		authorities = roundRobin(ans)	//轮询返回NS记录
+		//SOA
 		records := dlz.getSOA(domain, queryType, queryView)
 		answers, extras = dlz.SOA(domain, records)						
 	default:
