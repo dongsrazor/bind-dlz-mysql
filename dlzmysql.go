@@ -64,7 +64,7 @@ func (dlz Dlzmysql) get(domain string, queryType string, view string) ([]string)
 			if err != nil {
 				fmt.Println(err)
 			}
-			r := strings.Join([]string{domain, queryType, data, ttl}, ":")
+			r := strings.Join([]string{domain, queryType, data, ttl}, "#")
 			records = append(records, r)
 		}
 		if len(records) > 0 {
@@ -117,7 +117,7 @@ func (dlz Dlzmysql) getNS(domain string, queryType string, view string) ([]strin
 			if err != nil {
 				fmt.Println(err)
 			}
-			r := strings.Join([]string{domain, queryType, data, ttl}, ":")
+			r := strings.Join([]string{domain, queryType, data, ttl}, "#")
 			records = append(records, r)
 		}
 		if len(records) > 0 {
@@ -163,7 +163,7 @@ func (dlz Dlzmysql) getMX(domain string, queryType string, view string) ([]strin
 			if err != nil {
 				fmt.Println(err)
 			}
-			r := strings.Join([]string{domain, queryType, data, mxPriority, ttl}, ":")
+			r := strings.Join([]string{domain, queryType, data, mxPriority, ttl}, "#")
 			records = append(records, r)
 		}
 		if len(records) > 0 {
@@ -214,7 +214,7 @@ func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) ([]stri
 			if err != nil {
 				fmt.Println(err)
 			}
-			r := strings.Join([]string{domain, queryType, data, respPersion, ttl, serial, refresh, retry, expire, minimum}, ":")
+			r := strings.Join([]string{domain, queryType, data, respPersion, ttl, serial, refresh, retry, expire, minimum}, "#")
 			records = append(records, r)
 		}
 		if len(records) > 0 {
@@ -239,7 +239,7 @@ func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) ([]stri
 //A 记录
 func (dlz *Dlzmysql) A(name string, records []string) (answers, extras []dns.RR) {
 	for _, a := range records {
-		vals := strings.Split(a, ":")
+		vals := strings.Split(a, "#")
 		domain := vals[0]
 		//queryType :=vals[1]
 		data := vals[2]
@@ -261,7 +261,7 @@ func (dlz *Dlzmysql) A(name string, records []string) (answers, extras []dns.RR)
 //AAAA 记录
 func (dlz *Dlzmysql) AAAA(name string, records []string) (answers, extras []dns.RR) {
 	for _, aaaa := range records {
-		vals := strings.Split(aaaa, ":")
+		vals := strings.Split(aaaa, "#")
 		//domain := vals[0]
 		//queryType := vals[1]
 		data := vals[2]
@@ -283,7 +283,7 @@ func (dlz *Dlzmysql) AAAA(name string, records []string) (answers, extras []dns.
 //CNAME 记录
 func (dlz *Dlzmysql) CNAME(name string, records []string) (answers, extras []dns.RR) {
 	for _, cname := range records {
-		vals := strings.Split(cname, ":")
+		vals := strings.Split(cname, "#")
 		//domain := vals[0]
 		//queryType := vals[1]
 		fqdn := vals[2]
@@ -305,7 +305,7 @@ func (dlz *Dlzmysql) CNAME(name string, records []string) (answers, extras []dns
 //NS 记录
 func (dlz *Dlzmysql) NS(name string, records []string) (answers, extras []dns.RR) {
 	for _, ns := range records {
-		vals := strings.Split(ns, ":")
+		vals := strings.Split(ns, "#")
 		//domain := vals[0]
 		//queryType := vals[1]
 		fqdn := vals[2]
@@ -327,7 +327,7 @@ func (dlz *Dlzmysql) NS(name string, records []string) (answers, extras []dns.RR
 //MX 记录
 func (dlz *Dlzmysql) MX(name string, records []string) (answers, extras []dns.RR) {
 	for _, mx := range records {
-		vals := strings.Split(mx, ":")
+		vals := strings.Split(mx, "#")
 		//domain := vals[0]
 		//queryType := vals[1]
 		fqdn := vals[2]
@@ -352,7 +352,7 @@ func (dlz *Dlzmysql) MX(name string, records []string) (answers, extras []dns.RR
 //SOA 记录
 func (dlz *Dlzmysql) SOA(name string, records []string) (answers, extras []dns.RR) {
 	for _, soa := range records {
-		vals := strings.Split(soa, ":")
+		vals := strings.Split(soa, "#")
 		//domain := vals[0]
 		//queryType := vals[1]
 		ns := vals[2]
