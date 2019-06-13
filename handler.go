@@ -110,6 +110,14 @@ func (dlz *Dlzmysql) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.
 		records := dlz.getNS(domain, queryType, queryView)
 		ans, _ := dlz.NS(domain, records)
 		answers = roundRobin(ans)	//轮询返回NS记录
+		
+		//send the IP address (glue) along with NS records.
+		for _, rr := range answers {
+			fqdn := rr.(*dns.NS).Ns
+			rs := dlz.get(fqdn, "A", queryView)
+			ans, _ := dlz.A(fqdn, rs)
+			extras = append(extras, ans...)
+		}
 	case "MX":
 		//获取NS记录
 		_, zone := getHostZone(domain)
