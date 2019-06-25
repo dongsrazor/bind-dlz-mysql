@@ -236,6 +236,53 @@ func (dlz Dlzmysql) getSOA(domain string, queryType string, view string) ([]stri
 	return []string{}
 }
 
+
+//从mysql中查询TXT记录
+func (dlz Dlzmysql) getTXT(domain string, queryType string, view string) ([]string) {
+	host := "@"
+	_, zone := getHostZone(domain)
+	records := []string{}
+	key := []byte(strings.Join([]string{domain, queryType, view}, "-"))
+	got, err := dlz.Cache.Get(key)
+	if err != nil {
+		sql := "SELECT `data`, `ttl` FROM `dns_record` " +
+			"WHERE `host`='"+ host +"' AND `zone`='"+ zone +
+			"' AND `type`='"+ queryType +"' AND `view`='"+ view +"';"
+		rows, err := dlz.DB.Query(sql)
+		if err != nil {
+			log.Error("func getTXT error: ", err)
+			return []string{}
+		}
+		for rows.Next() {
+			var data string
+			var ttl string
+			err = rows.Scan(&data, &ttl)
+			if err != nil {
+				fmt.Println(err)
+			}
+			r := strings.Join([]string{domain, queryType, data, ttl}, "#")
+			records = append(records, r)
+		}
+		if len(records) > 0 {
+			val := []byte(strings.Join(records, ","))
+			dlz.Cache.Set(key, val, 600)			
+			return records
+		} else {
+			dlz.Cache.Set(key, []byte{}, 600)
+		}
+	} else {
+		if len(got) > 0 {
+			vals := strings.Split(string(got), ",")
+			for _, v := range vals {
+				records = append(records, v)
+			}
+			return records
+		}
+	}
+	return []string{}
+}
+
+
 //A 记录
 func (dlz *Dlzmysql) A(name string, records []string) (answers, extras []dns.RR) {
 	for _, a := range records {
@@ -398,14 +445,41 @@ func (dlz *Dlzmysql) SOA(name string, records []string) (answers, extras []dns.R
 	return
 }
 
+//TXT 记录
+func (dlz *Dlzmysql) TXT(name string, records []string) (answers, extras []dns.RR) {
+	for _, txt := range records {
+		vals := strings.Split(txt, "#")
+		//domain := vals[0]
+		//queryType := vals[1]
+		txtString := vals[2]
+		ttlString := vals[3]
+		
+		val, _ := strconv.ParseUint(ttlString, 10, 32)
+		ttl := uint32(val)
+		
+		var rr dns.RR
+		rr = new(dns.TXT)
+		rr.(*dns.TXT).Hdr = dns.RR_Header{Name: name, Rrtype: dns.TypeTXT,
+			Class: dns.ClassINET, Ttl: ttl}
+		rr.(*dns.TXT).Txt = append(rr.(*dns.TXT).Txt, txtString)
+		answers = append(answers, rr)
+	}
+	return
+}
+
 //从fqdn名称(以.结尾)分割host/zone
 //mysql存储的zone不以.结尾
 func getHostZone(domain string) (host, zone string) {
 	name := strings.TrimRight(domain, ".")
 	vals := strings.Split(name, ".")
 	length := len(vals)
-	host = strings.Join(vals[0:length-2], ".")
-	zone = strings.Join(vals[length-2:], ".")
+	if length > 2 {
+		host = strings.Join(vals[0:length-2], ".")
+		zone = strings.Join(vals[length-2:], ".")
+	} else {
+		host = "@"
+		zone = strings.Join(vals[length-2:], ".")
+	}
 	return
 }
 
