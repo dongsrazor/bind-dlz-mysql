@@ -122,7 +122,7 @@ func (dlz Dlzmysql) getNS(domain string, queryType string, view string) ([]strin
 		}
 		if len(records) > 0 {
 			val := []byte(strings.Join(records, ","))
-			dlz.Cache.Set(key, val, 600)			
+			dlz.Cache.Set(key, val, 600)
 			return records
 		} else {
 			dlz.Cache.Set(key, []byte{}, 600)
@@ -265,7 +265,7 @@ func (dlz Dlzmysql) getTXT(domain string, queryType string, view string) ([]stri
 		}
 		if len(records) > 0 {
 			val := []byte(strings.Join(records, ","))
-			dlz.Cache.Set(key, val, 600)			
+			dlz.Cache.Set(key, val, 600)
 			return records
 		} else {
 			dlz.Cache.Set(key, []byte{}, 600)
@@ -299,7 +299,7 @@ func (dlz *Dlzmysql) A(name string, records []string) (answers, extras []dns.RR)
 		rr.(*dns.A).Hdr = dns.RR_Header{Name: domain, Rrtype: dns.TypeA,
 			Class: dns.ClassINET, Ttl: ttl}
 		rr.(*dns.A).A = net.ParseIP(data).To4()
-		answers = append(answers, rr)			
+		answers = append(answers, rr)
 
 	}
 	return
@@ -539,8 +539,8 @@ func (dlz *Dlzmysql) connect() (*sql.DB, error) {
 	dsn := dlz.mysqlUser + ":" + dlz.mysqlPassword + "@tcp(" + dlz.mysqlAddress + ")/" + dlz.mysqlDB + "?timeout=1s&readTimeout=1s"
 	db, err := sql.Open("mysql", dsn)
 	if err != err {
-		db.SetMaxOpenConns(10)
-		db.SetMaxIdleConns(10)		
+		db.SetMaxOpenConns(1024)
+		db.SetMaxIdleConns(10)
 	}
 	return db, err
 }
